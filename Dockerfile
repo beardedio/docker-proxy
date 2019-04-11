@@ -1,16 +1,21 @@
-FROM golang:1.7
-MAINTAINER kc merrill <kcmerrill@gmail.com>
+FROM golang as builder
 
-RUN apt-get -y update
-RUN apt-get -y install curl iproute2 netbase
+ENV GO111MODULE=on
 
-COPY . /code
 WORKDIR /code
 
-RUN go get -u -v github.com/kcmerrill/fetch-proxy
+COPY go.mod .
+COPY go.sum .
 
-EXPOSE 80
-EXPOSE 443
+RUN go mod download
 
-ENTRYPOINT ["fetch-proxy"]
-CMD ["--containerized"]
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build
+
+
+# final stage
+FROM alpine
+COPY --from=builder /code/docker-proxy /code/
+EXPOSE 8080
+ENTRYPOINT ["/code/docker-proxy"]

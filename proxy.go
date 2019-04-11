@@ -5,16 +5,23 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/kcmerrill/shutdown.go"
 	log "github.com/sirupsen/logrus"
-	"rsc.io/letsencrypt"
 )
 
 // Store all of our endpoints
 var endpoints map[string]*Endpoint
 var endpointkeys sort.StringSlice
+
+func stringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+	return false
+}
 
 // passThrough takes in traffic on specific port and passes it through to the appropriate endpoint
 func passThrough(w http.ResponseWriter, r *http.Request, defaultEndpoint string) {
@@ -25,58 +32,51 @@ func passThrough(w http.ResponseWriter, r *http.Request, defaultEndpoint string)
 
 	endpoint := siteKey(r.Host, defaultEndpoint)
 
-	log.WithFields(
-		log.Fields{
-			"Request":   r.Host,
-			"IP":        r.RemoteAddr,
-			"Forwarded": endpoint,
-		}).Info("New Request")
-
 	// One quick sanity check before sending it on it's way
 	if _, exists := endpoints[endpoint]; exists {
+		log.WithFields(
+			log.Fields{
+				"Request":   r.Host,
+				"From":      r.RemoteAddr,
+				"To":        endpoints[endpoint].Address,
+				"Forwarded": endpoint,
+			}).Info("New Request")
+
 		endpoints[endpoint].Proxy.ServeHTTP(w, r)
 	} else {
+		log.WithFields(
+			log.Fields{
+				"Request":   r.Host,
+				"From":      r.RemoteAddr,
+				"Forwarded": endpoint,
+			}).Info("Bad Request")
+
 		w.WriteHeader(http.StatusBadGateway)
 		w.Write([]byte("Error 502 - Bad Gateway"))
 	}
 }
 
-// FetchProxyStart creates and starts the proxy
-func FetchProxyStart(httpPort int, secured, healthChecks bool, healthCheckURL, defaultEndpoint string) {
+// DProxyStart creates and starts the proxy
+func DProxyStart(httpPort int, defaultEndpoint string) {
 	log.WithFields(
 		log.Fields{
 			"port": httpPort,
 		}).Info("Starting fetch proxy")
 
-	// Start our healthchecks
-	if healthChecks {
-		go HealthChecks(healthCheckURL)
-	}
-
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		passThrough(w, r, defaultEndpoint)
 	})
 
-	if !secured {
-		// Not secured, so lets just start a simple webserver
-		if err := http.ListenAndServe(fmt.Sprintf(":%d", httpPort), nil); err != nil {
-			log.Fatal(err.Error())
-			shutdown.Now()
-		}
-	} else {
-		// start our letsencrypt SSL goodies
-		var m letsencrypt.Manager
-		if err := m.CacheFile("letsencrypt.cache"); err != nil {
-			log.Fatal(err)
-			shutdown.Now()
-		}
-		log.Fatal(m.Serve())
+	// Not secured, so lets just start a simple webserver
+	if err := http.ListenAndServe(fmt.Sprintf(":%d", httpPort), nil); err != nil {
+		log.Fatal(err.Error())
+		shutdown.Now()
 	}
 
 }
 
 // AddSite adds a new website to the proxy to be forwarded
-func AddSite(base, address string, healthChecks bool, healthCheckURL string) error {
+func AddSite(base, address string) error {
 	// Check if endpoint already exists
 	for _, item := range endpoints {
 		if item.Registered == base && item.Address.String() == address {
@@ -92,10 +92,10 @@ func AddSite(base, address string, healthChecks bool, healthCheckURL string) err
 		urlbase = urlbase[0:strings.Index(urlbase, "_")]
 	}
 
-	key := urlbase + "-" + time.Now().Format("2006-01-02T15:04:05.000")
+	key := urlbase
 
 	// Add new endpoint
-	ep, err := NewEndpoint(base, address, healthChecks, healthCheckURL)
+	ep, err := NewEndpoint(base, address)
 	if err == nil {
 		// If it doesn't exist ...
 		log.WithFields(log.Fields{
@@ -103,24 +103,17 @@ func AddSite(base, address string, healthChecks bool, healthCheckURL string) err
 			"registered": base,
 			"urlbase":    urlbase,
 		}).Info("Registered endpoint")
+
 		endpoints[key] = ep
-		endpointkeys = append(endpointkeys, key)
+		if !stringInSlice(key, endpointkeys) {
+			endpointkeys = append(endpointkeys, key)
+		}
 
 		sort.Sort(sort.Reverse(endpointkeys))
 
 		return nil
 	}
 	return err
-}
-
-// HealthChecks starts the background process for __all__ site health checks
-func HealthChecks(healthCheckURL string) {
-	for {
-		<-time.After(10 * time.Second)
-		for key := range endpoints {
-			go endpoints[key].HealthCheck(healthCheckURL)
-		}
-	}
 }
 
 // Site key determines the endpoint to use based on the host

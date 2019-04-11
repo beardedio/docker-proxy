@@ -1,4 +1,27 @@
-letsencrypt.cache
-.yoda.setup
-config/.proxy
+# OS Generated Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Editor Files
+.idea
+.vagrant
+.vscode
+.fuse_hidden*
+*.sublime*
+*.codekit
+*.bak
+*.iml
+*.swp
+*.kdev4
+.kdev4/
+
+# Project Files
+vendor/
 bin/

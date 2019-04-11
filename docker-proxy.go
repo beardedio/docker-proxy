@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"net/http"
+	"os"
 	"syscall"
 	"time"
 
@@ -10,37 +11,35 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+func init() {
+	// Log as JSON instead of the default ASCII formatter.
+	//log.SetFormatter(&log.JSONFormatter{})
+
+	// Output to stdout instead of the default stderr
+	// Can be any io.Writer, see below for File example
+	log.SetOutput(os.Stdout)
+
+	// Only log the warning severity or above.
+	log.SetLevel(log.DebugLevel)
+	//log.SetLevel(log.InfoLevel)
+}
+
 func main() {
 	// Setup some command line arguments
 	port := flag.Int("port", 80, "The port in which the proxy will listen on")
 	containerized := flag.Bool("containerized", false, "Is fetch-proxy running in a container?")
-	insecure := flag.Bool("insecure", false, "Should use HTTP or HTTPS? HTTP works great for dev envs")
-	disableHealthChecks := flag.Bool("disable-healthchecks", false, "disable health checks for dev envs")
-	healthCheckURL := flag.String("healthcheck", "?health", "The url to be used for healthchecks")
-	dev := flag.Bool("dev", false, "Disable health checks and HTTPS for dev envs")
 	timeout := flag.Int("response-timeout", 10, "The response timeout for the proxy")
 	defaultEndpoint := flag.String("default", "__default", "The default endpoint fetch-proxy uses when requested endpoing isn't found")
-	config := flag.String("config", "", "Location for the configuration file you want to use")
 
 	flag.Parse()
-
-	// Disable ssl/tls and health checks in dev mode
-	if *dev {
-		*disableHealthChecks = true
-		*insecure = true
-	}
 
 	// Set a global timeout
 	http.DefaultClient.Timeout = time.Duration(*timeout) * time.Second
 
 	// Start our proxy on the specified port
-	go FetchProxyStart(*port, !*insecure, !*disableHealthChecks, *healthCheckURL, *defaultEndpoint)
+	go DProxyStart(*port, *defaultEndpoint)
 
-	go ContainerWatch(*containerized, !*disableHealthChecks, *healthCheckURL, *port)
-
-	if *config != "" {
-		go ConfigWatch(*config, *containerized, !*disableHealthChecks, *healthCheckURL)
-	}
+	go ContainerWatch(*containerized, *port)
 
 	// No need to shutdown the application _UNLESS_ we catch it
 	shutdown.WaitFor(syscall.SIGINT, syscall.SIGTERM)
