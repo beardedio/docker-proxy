@@ -36,10 +36,11 @@ func passThrough(w http.ResponseWriter, r *http.Request, defaultEndpoint string)
 	if _, exists := endpoints[endpoint]; exists {
 		log.WithFields(
 			log.Fields{
-				"Request":   r.Host,
-				"From":      r.RemoteAddr,
-				"To":        endpoints[endpoint].Address,
-				"Forwarded": endpoint,
+				"Host":       r.Host,
+				"From":       r.RemoteAddr,
+				"To":         endpoints[endpoint].Address,
+				"RequestURI": r.RequestURI,
+				"Forwarded":  endpoint,
 			}).Info("New Request")
 
 		endpoints[endpoint].Proxy.ServeHTTP(w, r)
