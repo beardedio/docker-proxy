@@ -15,10 +15,15 @@ Docker-Proxy is a simple reverse proxy that routes web traffic to running docker
 
 By default Docker-Proxy with automatically route traffic based on the containers name when using port 80 inside the container.
 
-## Custom DNS Name/Port
+## Additional Domains Names
 
-To override the domain or port for routing to a container, add these env vars `VIRTUAL_HOST` &/or `VIRTUAL_PORT` to the list of environment variables to your container.
+To add additional domain names to a container, add this env var `VIRTUAL_HOST` to the list of environment variables to your container. To add more then one domain add more env vars like `VIRTUAL_HOST_1` &/or `VIRTUAL_HOST_blah`
 
+You can also specify a port along with the domain name by using the format `VIRTUAL_HOST=mycoolhost.test:443`
+
+## Override default port
+
+To override the default port looked for inside a container add the env var `VIRTUAL_PORT`
 
 Here is a docker-compose.yml example
 ```yaml
